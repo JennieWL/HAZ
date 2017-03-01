@@ -265,6 +265,30 @@ c -------------------------------------------------------------
 
 c -------------------------------------------------------------
 
+      subroutine Init_tempHaz3 ( tempHaz3 )
+
+      implicit none
+      include 'pfrisk.h'   
+                                                     
+      real*8 tempHaz3(MAX_PROB,MAX_KY*MAX_ALPHAD*MAX_SF, MAX_INTEN)
+      integer i, j, k, l, m, itest
+      
+      do i=1,MAX_PROB
+       do j=1,MAX_Ky
+        do k=1,MAX_AlphaD
+         do l=1,MAX_SF
+          do m=1,MAX_INTEN
+           itest = (j-1)*MAX_ALPHAD*MAX_SF+(k-1)*MAX_SF+l
+           tempHaz3(i,itest,m) = 0.0
+          enddo
+         enddo
+        enddo
+       enddo
+      enddo
+      return
+      end                                                            
+
+c -------------------------------------------------------------
       subroutine InitDeagg ( m_bar, d_bar, e_bar, Xcost_bar )
 
       implicit none

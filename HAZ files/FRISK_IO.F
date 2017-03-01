@@ -5,7 +5,9 @@
      3               nMagBins, magBins, nDistBins, distBins, nepsBins, epsBins,
      4               nXcostBins, xcostBins, soilAmpFlag, gm_wt, sigvaradd,
      5               sCalc, sigfix, bnumflag, cfcoefrrup, cfcoefrjb, 
-     6               coefcountrrup, coefcountRjb, iMixture, version )
+     6               coefcountrrup, coefcountRjb, iMixture, version,  
+     8  DamHeight, nKy, Ky, KyWt, nDamT, DamT, DamTWt, nAlphaD, AlphaD, AlphaDWt, BetaD,  
+     1  nSF, SF, SigmaD, SFWt)
 
       implicit none
       include 'pfrisk.h'
@@ -26,6 +28,16 @@
      1     sigvaradd(MAX_PROB,4,MAX_ATTEN), cfcoefrrup(MAX_Atten,11), 
      2     cfcoefrjb(MAX_Atten,11), version
       character*80 file1, filelog 
+      
+           
+      real Ky(MAX_PROB,MAX_KY), AlphaD(MAX_PROB,MAX_AlphaD), SF(MAX_PROB,MAX_SF),
+     2     KyWt(MAX_PROB,MAX_KY), AlphaDWt(MAX_PROB,MAX_AlphaD), SFWt(MAX_PROB,MAX_SF), 
+     3     BetaD(MAX_PROB,MAX_ALPHAD,3), 
+     4     SigmaD(MAX_PROB,MAX_SF), DamHeight(MAX_PROB), DamT(MAX_PROB,MAX_DAMT,3), DamTWt(MAX_PROB,MAX_DAMT)
+      integer nKy(MAX_PROB), nSF(MAX_PROB), nDamT(MAX_PROB),
+     1        nAlphaD(MAX_PROB)
+      
+      
 
 c     Set Data file units
       nwr = 11
@@ -34,7 +46,7 @@ C     Run Ground Motion Case or PSHA case.
  123  write (*,*) 'Enter 0 to run hazard'
       write (*,*) 'Enter 1 to run attenuation models'
       write (*,*) 'Enter 2 to run spectra models'
-      write (*,*) 'Enter 3 to run dam displacement hazard'
+      write (*,*) 'Enter 4 to run dam displacement hazard'
 
 
       if (bnumflag .eq. 0) then
@@ -92,7 +104,7 @@ c        Create log filename for PHSA run.
          open (13,file=file1,status='old')
          call determ (runFlag)
          stop    
-      elseif (runFlag .eq. 3) then    
+      elseif (runFlag .eq. 4) then    
          write (*,*) 'Enter the input file name for dam displacement PSHA runs.'
          if (bnumflag .eq. 0) then
            read (*,'( A80)') file1
@@ -120,7 +132,18 @@ c        Create log filename for PHSA run.
          filelog(charcount+4:charcount+4) = 'g'
          open (18,file=filelog(1:charcount+4))
               
-         call Read_Dam_Haz_Input_1(version, minlat, maxlat, minlong, maxlong, distmax)     
+c         call Read_Dam_Haz_Input_1(version, minlat, maxlat, minlong, maxlong, distmax)     
+         
+         call Read_Dam_Haz_Input ( nProb, nAttenType, nAtten, jcalc, specT, sigTrunc,
+     1               gmScale, dirFlag, nInten, testInten, lgTestInten, 
+     2               psCorFlag, minlat, maxlat, minlong, maxlong, distmax,
+     3               nMagBins, magBins, nDistBins, distBins, nepsBins, epsBins,
+     4               nXcostBins, xcostBins, soilAmpFlag, gm_wt, sigvaradd,
+     5               sCalc, sigfix, bnumflag, cfcoefrrup, cfcoefrjb, 
+     6               coefcountrrup, coefcountRjb, iMixture, version,  
+     8  DamHeight, nKy, Ky, KyWt, nDamT, DamT, DamTWt, nAlphaD, AlphaD, AlphaDWt, BetaD,  
+     1  nSF, SF, SigmaD, SFWt)
+         
       else
          write (*,*) 'Invalid entry!!!'
          write (*,*) 'Try again.'
@@ -164,6 +187,8 @@ c  --------------------------
       real gmScale(MAX_PROB,4,MAX_ATTEN), gm_wt(MAX_PROB,4,MAX_ATTEN), 
      1     sigvaradd(MAX_PROB,4,MAX_ATTEN), cfcoefrrup(MAX_Atten,11), 
      2     cfcoefrjb(MAX_Atten,11), checkattenwt, version
+
+     
       character*80 filein, title
 
 c     Set Data file units
@@ -261,8 +286,8 @@ C     Check that attenuation model weights sum to unity.
              write (*,*) 'Total Weights = ', checkattenwt
              write (*,*) 'Check input run file.'
              stop 99
-          endif
-        enddo
+          endif                              
+        enddo           
       enddo
       read (13,*,err=2009) psCorFlag
       write (18,*)
@@ -332,48 +357,19 @@ c     Read bins for de-aggregating the hazard
 
       end      
       
-c  --------------------------
-      subroutine Read_Dam_Haz_Input_1(version, minlat, maxlat, minlong, maxlong, distmax)
-      
-      implicit none
-      
-      real minlat, maxlat, minlong, maxlong, distmax, version
-      character*80 filein
-      
-      
-c     Read fault file name and version format     
-      read (13,'( a80)') filein
-      open (10,file=filein,status='old',err=2101)
-      read (13,*,err=2020) version
 
-c     Read min max long and lat for grid sources
-      read (13,*,err=2001) minlat, maxlat, minlong, maxlong
-      read (13,*,err=2002) distmax
-      
-      return
-      
- 2001 write (*,'( 2x,''input file error: minlat, maxlat line'')') 
-      stop 99
- 2002 write (*,'( 2x,''input file error: maxdist line'')') 
-      stop 99
- 2020 write (*,'( 2x,''input file error: fault file version number'')') 
-      stop 99
- 2101 write (*,'( 2x,''fault file does not exist'')')
-      write (*,'( 2x,a80)') filein
-      stop 99      
-      
-      end
 
 c     ---------------------------------
-      subroutine Read_Dam_Haz_Input_2 ( nProb, nAttenType, nAtten, jcalc, specT, sigTrunc,
+      subroutine Read_Dam_Haz_Input ( nProb, nAttenType, nAtten, jcalc, specT, sigTrunc,
      1               gmScale, dirFlag, nInten, testInten, lgTestInten, 
-     2               psCorFlag,
+     2               psCorFlag, minlat, maxlat, minlong, maxlong, distmax,
      3               nMagBins, magBins, nDistBins, distBins, nepsBins, epsBins,
      4               nXcostBins, xcostBins, soilAmpFlag, gm_wt, sigvaradd,
      5               sCalc, sigfix, bnumflag, cfcoefrrup, cfcoefrjb, 
-     6               coefcountrrup, coefcountRjb, iMixture, version, 
-     7  SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc, 
-     8  refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
+     6               coefcountrrup, coefcountRjb, iMixture, version,  
+     8  DamHeight, nKy, Ky, KyWt, nDamT, DamT, DamTWt, nAlphaD, AlphaD, AlphaDWt, BetaD,  
+     1  nSF, SF, SigmaD, SFWt)
+          
 
       implicit none
       include 'pfrisk.h'
@@ -385,7 +381,7 @@ c     include 'declare1.h'
      3        sCalc(MAX_PROB,4,MAX_ATTEN), nAttenType, j1, k, jj,
      4        nAtten(MAX_PROB,4), soilAmpFlag
       integer coefcountrrup, coefcountrjb,
-     1        iMixture(MAX_PROB,4,MAX_ATTEN), nRefPer, nRefGM, nRefMag
+     1        iMixture(MAX_PROB,4,MAX_ATTEN)
       real testInten(MAX_PROB,MAX_INTEN),  
      1     lgTestInten(MAX_PROB,MAX_INTEN), 
      2     distBins(MAX_DIST), epsBins(MAX_EPS), XcostBins(MAX_Xcost),
@@ -394,13 +390,31 @@ c     include 'declare1.h'
       real gmScale(MAX_PROB,4,MAX_ATTEN), gm_wt(MAX_PROB,4,MAX_ATTEN), 
      1     sigvaradd(MAX_PROB,4,MAX_ATTEN), cfcoefrrup(MAX_Atten,11), 
      2     cfcoefrjb(MAX_Atten,11), checkattenwt, version
-      real SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc
-      real refPeriod(MAX_AMPPER), RefGM(MAX_AMPMAG,MAX_AMPPER,MAX_AMPGM),
-     1     amp(MAX_AMPMAG,MAX_AMPPER,MAX_AMPGM), RefGM_Mag(MAX_AMPMAG) 
+
+
+     
+      real Ky(MAX_PROB,MAX_KY), AlphaD(MAX_PROB,MAX_AlphaD), SF(MAX_PROB,MAX_SF),
+     2     KyWt(MAX_PROB,MAX_KY), AlphaDWt(MAX_PROB,MAX_AlphaD), SFWt(MAX_PROB,MAX_SF), 
+     3     BetaD(MAX_PROB,MAX_ALPHAD,3),
+     4     SigmaD(MAX_PROB,MAX_SF), DamHeight(MAX_PROB), DamT(MAX_PROB,MAX_DAMT,3), DamTWt(MAX_PROB,MAX_DAMT)
+      integer nKy(MAX_PROB), nSF(MAX_PROB), nDamT(MAX_PROB),
+     1        nAlphaD(MAX_PROB), iAlphaD, iDamT
       character*80 title
+      
+      real minlat, maxlat, minlong, maxlong, distmax
+      character*80 filein
 
 c     Set Data file units
       nwr = 11
+      
+c     Read fault file name and version format     
+      read (13,'( a80)') filein
+      open (10,file=filein,status='old',err=2101)
+      read (13,*,err=2020) version
+
+c     Read min max long and lat for grid sources
+      read (13,*,err=2001) minlat, maxlat, minlong, maxlong
+      read (13,*,err=2002) distmax
 
 c     Input options 
       read(13,'( a80)') title
@@ -415,11 +429,18 @@ c     Input options
       write (18,*) 
       write (18,'(a20,2x,i4)') 'Number of Problems: ', nProb
       write (18,'(a29,2x,i4)') 'Number of Attenuation Types: ', nAttentype
-      write (18,*)
-
+      write (18,*)     
+      
 c     Enter GM models for each problem
       do i=1,nProb
         read (13,*,err=2004) specT(i), sigTrunc(i), dirflag(i)
+        
+        if (specT(i) .gt. 0.01) then
+         specT(i) = 0.01
+         write(*,*) 'specT set to 0.01 for dam risk calculations, press enter to continue'
+         pause
+        endif    
+    
         call CheckDir (dirflag(i))
         read (13,*,err=2005) nInten(i), (testInten(i,j),j=1,nInten(i))
         call CheckDim ( nInten(i), MAX_INTEN, 'MAX_INTEN ' )
@@ -444,7 +465,7 @@ c     Enter GM models for each problem
           call CheckDim ( nAtten(i,j), MAX_ATTEN, 'MAX_ATTEN ' )
           do k=1,nAtten(i,j)
             read (13,*,err=2007) jCalc(i,j,k), gm1, gm2, gm_wt(i,j,k), sigvaradd(i,j,k), iMixture(i,j,k)  
-
+            
 C           Check for either fixed sigma or different sigma model (i.e., jCalc<0)
             if (jcalc(i,j,k) .lt. 0) then
               backspace (13)
@@ -487,7 +508,28 @@ C     Check that attenuation model weights sum to unity.
              stop 99
           endif
         enddo
+        
+c     Read dam parameters for each period        
+        read (13,*) DamHeight(i)
+        read (13,*) nKy(i)
+        read (13,*) (Ky(i,j),j=1,nKy(i))
+        read (13,*) (KyWt(i,j),j=1,nKy(i))
+        read (13,*) nDamT(i)
+        do iDamT = 1,nDamT(i)
+         read (13,*) (DamT(i,iDamT,j),j=1,3), DamTWt(i,iDamT)
+        enddo
+        read (13,*) nAlphaD(i)
+        do iAlphaD = 1, nAlphaD(i)
+         read (13,*) AlphaD(i,iAlphaD), (BetaD(i,iAlphaD,j),j=1,3), AlphaDWt(i,iAlphaD)
+         BetaD(i,iAlphaD,1) = alog ( BetaD(i,iAlphaD,1))
+        enddo
+        read (13,*) nSF(i)
+        read (13,*) (SF(i,j),j=1,nSF(i))
+        read (13,*) (SigmaD(i,j),j=1,nSF(i))
+        read (13,*) (SFWt(i,j),j=1,nSF(i))
+
       enddo
+
       read (13,*,err=2009) psCorFlag
       write (18,*)
       write (18,*) 'psCorFlag = ', psCorflag
@@ -508,15 +550,15 @@ c     Read bins for de-aggregating the hazard
       call CheckDim ( nXcostBins, MAX_Xcost, 'MAX_Xcost ' )
       read (13,*,err=2017) (XcostBins(k),k=1,nXcostBins)
 
-      read (13,*,err=2018) soilAmpFlag   
+      read (13,*,err=2018) soilAmpFlag
                   
 c       Read site coordinates and properties
-        read (13,*,err=2101) SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc
+c        read (13,*,err=2101) SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc
        
 c       Read site-specific site amplification
-        if ( soilAmpFlag .eq. 1 ) then
-         call RdSoilAmpModel ( refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
-        endif
+c        if ( soilAmpFlag .eq. 1 ) then
+c         call RdSoilAmpModel ( refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
+c        endif
 
       return
  2001 write (*,'( 2x,''input file error: minlat, maxlat line'')') 
@@ -736,7 +778,32 @@ c  -------------------------------------------------------------------
     
       return
       end
-      
+c  -------------------------------------------------------------------
+      subroutine WriteTempHaz3 ( tempHaz3, nProb, nKy, nAlphaD, nSF, nInten )
+
+      implicit none
+      include 'pfrisk.h'
+
+      integer nProb, nKy(MAX_PROB),nAlphaD(MAX_PROB), nSF(MAX_PROB), nInten(MAX_PROB),
+     1        nwr, iProb, iKy, iAlphaD, iSF, iTest, iDam
+      real*8 tempHaz3(MAX_PROB,MAX_KY*MAX_AlphaD*MAX_SF, MAX_INTEN)
+
+      nwr = 30
+
+      write (*,'( i5)') nProb      
+      do iProb = 1,nProb
+       do iKy=1,nKy(iProb)
+        do iAlphaD = 1,nAlphaD(iProb)
+         do iSF = 1,nSF(iProb)
+          iDam = (iKy-1)*nAlphaD(iProb)*nSF(iProb)+(iAlphaD-1)*nSF(iProb)+iSF
+          write (30,'( 4i5, 100e12.4 )')  iProb,iKy,iAlphaD,iSF, (tempHaz3(iProb,iDam,iTest), iTest=1,nInten(1))
+         enddo
+        enddo
+       enddo
+      enddo
+    
+      return
+      end      
 c  -------------------------------------------------------------------
  
       subroutine output_TotalHaz ( isite, sitex, sitey, ati, nInten, 

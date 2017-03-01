@@ -39,7 +39,7 @@ c     Convert Lat, long to km (using site coordinates as ref)
         refLong = siteX
 
 c       Check for grid source
-        if ( sourceType .eq. 3 .or. sourceType .eq. 4 ) then       
+        if ( sourceType .eq. 3 .or. sourceType .eq. 4  ) then       
           do i=1,grid_n
               phi1 = refLat*3.1415926/180.
               phi2 = grid_lat(iFlt,i)*3.1415926/180.

@@ -43,7 +43,9 @@ c     Read Run File Part 1
      3               nMagBins, magBins, nDistBins, distBins, nepsBins, epsBins,
      4               nXcostBins, xcostBins, soilAmpFlag, gm_wt, sigvaradd,
      5               sCalc, sigfix, bnumflag, cfcoefRrup, cfcoefRjb, 
-     6               coefcountRrup, coefcountRjb, iMixture, version )
+     6               coefcountRrup, coefcountRjb, iMixture, version ,  
+     8  DamHeight, nKy, Ky, KyWt, nDamT, DamT, DamTWt, nAlphaD, AlphaD, AlphaDWt, BetaD,  
+     1  nSF, SF, SigmaD, SFWt)
 
 c     read fault File
       call Rd_Fault_Data ( nFlt, fName, minMag, magStep, xStep,
@@ -68,29 +70,11 @@ c     Loop Over Number of Sites
       read (13,*,err=2100) nSite    
       do 1000 iSite = 1, nSite      
 
-c     Read Run File Part 2      
-       if (runFlag .eq. 0) then
-            
-c       Read site coordinates and properties
-        read (13,*,err=2101) SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc
-       
-c       Read site-specific site amplification
-        if ( soilAmpFlag .eq. 1 ) then
-         call RdSoilAmpModel ( refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
-        endif
-        
-       elseif (runFlag .eq. 3) then
- 
-         call Read_Dam_Haz_Input_2 ( nProb, nAttenType, nAtten, jcalc, specT, sigTrunc,
-     1               gmScale, dirFlag, nInten, testInten, lgTestInten, 
-     2               psCorFlag,
-     3               nMagBins, magBins, nDistBins, distBins, nepsBins, epsBins,
-     4               nXcostBins, xcostBins, soilAmpFlag, gm_wt, sigvaradd,
-     5               sCalc, sigfix, bnumflag, cfcoefrrup, cfcoefrjb, 
-     6               coefcountrrup, coefcountRjb, iMixture, version, 
-     7  SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc, 
-     8  refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
-        
+c      Read site coordinates and properties
+       read (13,*,err=2101) SiteX, SiteY, vs, depthvs10, depthvs15, D25, vrup, forearc       
+c      Read site-specific site amplification
+       if ( soilAmpFlag .eq. 1 ) then
+        call RdSoilAmpModel ( refPeriod, nRefPer, RefGM, nRefGM, RefGM_mag, nRefMag, amp )
        endif
 
 c      Open Output1 file which will contain the individual hazard curves. 
@@ -128,7 +112,15 @@ c      Open Output6 file which will contain the individual GMPE hazard curves ov
 c      Open Output7 file which will contain deaggregations for each source.
        read (13,'( a80)',err=2107) file1
        open (29,file=file1,status='unknown')
+
        write (29, *) '45.3 Haz45.3 Out7 file - deaggregation by source'
+
+c      Open Output8 file which will contain the individual Dam hazard curves over GMC and SSC models.    
+       if (runFlag .eq. 4) then
+         read (13,'( a80)',err=2107) file1
+         open (30,file=file1,status='unknown')
+         write (30, *) '45.3 Haz45.3 Out8 file - Dam tornado output file, iProb, iKy, iDamp, iSF, iBeta, Intens'       
+       endif
        
 c      Initialize Haz Arrays to zero
        call InitHaz ( Haz )
@@ -142,6 +134,9 @@ c      Initialize Mean Deagg values for this site
 
 C      Initialize temp hazard array for GM sensitivity
        call Init_tempHaz2 ( tempHaz2 )
+       
+C      Initialize temp hazard array for Dam sensitivity
+       call Init_tempHaz3 ( tempHaz3 )       
         
 c      Sum Over Number of sources 
        do 900 iFlt = 1, nFlt
@@ -268,10 +263,10 @@ c            rupWidth = sqrt(rupArea/2.)
 
 c------------end temporary code
 
-        call RupDims (sourcetype(iFlt), rupWidth, aveWidth, rupArea, faultLen,
+            call RupDims (sourcetype(iFlt), rupWidth, aveWidth, rupArea, faultLen,
      1                faultWidth(iFlt,iFltWidth), nLocYST1, yStep(iFlt), rupLen)
 
-        call nLocXcells (sourceType(iFlt), nLocXAS, grid_n(iFlt), nfltgrid, fltgrid_w,
+            call nLocXcells (sourceType(iFlt), nLocXAS, grid_n(iFlt), nfltgrid, fltgrid_w,
      1                   rupWidth, fltgrid_a, ruparea, nLocYST1, nLocX, n1AS, n2AS)
 
 c           Integrate Over Rupture Location - along strike (aleatory)
@@ -323,282 +318,409 @@ c             Set the distance bin for de-aggregation (using rupture distance)
 
 c             Loop over ftypes
               do 561 iFtype=1,nFtype(iFlt)
+              
+              sumProb = 0.
+              pProb = 0.
 
 c             Loop Over Number of Problems (e.g. spectral periods)
-              do 560 iProb=1,nProb
-               jType = attenType(iFlt)
-               do 550 iAtten = 1,nAtten(iProb,jType)
+               do 560 iProb=1,nProb
+                jType = attenType(iFlt)
+                do 550 iAtten = 1,nAtten(iProb,jType)
 
-c               Check for negative jcalc values which will set the corresponding sigma to 
-C               either a fixed value or sigma from another model.
-                sigflag = 0
-                if (jcalc(iProb,jType,iAtten) .lt. 0) then
-                   jcalc1 = abs(jcalc(iProb,jType,iAtten) )
-                   scalc1 = scalc(iProb,jtype,iAtten) 
-                   sigfix1 = sigfix(iProb,jType,iAtten)
-C                  Check for either fixed sigma value (scalc1<0) or other sigma model
-                   if (scalc1 .lt. 0) then
-                     sigflag = 2
-                   else
-                     sigflag = 1
-                   endif
-                else
-                   jcalc1 = jcalc(iProb,jType,iAtten) 
-                endif 
+c                Check for negative jcalc values which will set the corresponding sigma to 
+C                either a fixed value or sigma from another model.
+                 sigflag = 0
+                 if (jcalc(iProb,jType,iAtten) .lt. 0) then
+                  jcalc1 = abs(jcalc(iProb,jType,iAtten) )
+                  scalc1 = scalc(iProb,jtype,iAtten) 
+                  sigfix1 = sigfix(iProb,jType,iAtten)
+C                 Check for either fixed sigma value (scalc1<0) or other sigma model
+                  if (scalc1 .lt. 0) then
+                   sigflag = 2
+                  else
+                   sigflag = 1
+                  endif
+                 else
+                  jcalc1 = jcalc(iProb,jType,iAtten) 
+                 endif 
 
-c              Compute the median and sigma of the ground motions
-               if (sourceType(iFlt) .ne. 7) then
-                 call meanInten ( distRup, distJB, distSeismo,
-     1               HWFlag, mag, jcalc1, specT(iProb),  
-     2               lgInten, sigmaY, ftype(iFlt,iFtype), attenName, period1, 
-     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
-     4               disthypo, depthvs10, depthvs15, D25, tau,
-     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
-     6               cfcoefrrup, cfcoefrjb, Ry0 )
-               elseif (sourceType(iFlt) .eq. 7) then
-                 call meanInten ( distRup, distJB, distSeismo,
-     1               HWFlag, mag, jcalc1, specT(iProb),  
-     2               lgInten, sigmaY, mechS7(iFlt,iMag), attenName, period1, 
-     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
-     4               disthypo, depthvs10, depthvs15, D25, tau,
-     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
-     6               cfcoefrrup, cfcoefrjb, Ry0 )
-              endif
 
-c               Add epistemic uncertainty term (constant shift) to median
-                lgInten = lgInten + gmScale(iProb,jType,iAtten)
-
-C               Second Median Call for Complex/Splay Rupture Median
-C               Ground Motions will be SRSS with main rupture median ground motions.
-                if (synchron(iFlt) .eq. 0) then
+C                Second Median Call for Complex/Splay Rupture Median
+C                Ground Motions will be SRSS with main rupture median ground motions.
+                 if (synchron(iFlt) .eq. 0) then
                   nSyn_Case(iFlt) = 1
                   synwt(iFlt,1)= 1.0
-                endif
+                 endif
 
-c               Temp: set probability of syn rupture to unity
-c               Later, this will be an input
-                probSyn = 1.
+c                Temp: set probability of syn rupture to unity
+c                Later, this will be an input
+                 probSyn = 1.
 
-c               Loop over synchronous ruptures (aleatory)          
-                do 549 isyn=1,nSyn_Case(iFlt)
-                 if (synchron(iFlt) .gt. 0 .and. rup1_flag .eq. 1) then
-                  call meanInten ( synDistRup(iFlt,isyn), syndistJB(iFlt,isyn), 
-     1                syndistSeismo(iFlt,isyn),
-     2                synhwflag(iFlt,isyn), synmag(iFlt,isyn), synjcalc(iFlt), specT(iProb),  
-     3                lgIntenS, temp, synftype(iFlt,isyn), attenName, period1, 
-     4                iAtten, iProb, jType, vs, synhypo(iflt,1), intflag, AR, syn_dip(iFlt,isyn),
-     5                disthypo, depthvs10, depthvs15, D25, tau,
-     6                syn_zTOR(iFlt,isyn), theta_site, syn_RupWidth(iFlt,isyn), 
-     7                vs30_class, forearc, syn_Rx(iFlt,isyn), phi,
-     8                cfcoefrrup, cfcoefrjb, syn_Ry0(iFlt,isyn) )
+c                Loop over synchronous ruptures (aleatory)          
+                 do 549 isyn=1,nSyn_Case(iFlt)
 
-c                 Compute SRSS of median                
-                  lgInten = 0.5* alog( exp(lgInten)**2 + exp(lgIntenS)**2 )
-                endif
 
-C               Second call get GMPE for different sigma model 
-                if (sigflag .eq. 1) then
-                  if (sourceType(iFlt) .ne. 7) then
-                    call meanInten ( distRup, distJB, distSeismo,
-     1               hwflag, mag, scalc1, specT(iProb),  
-     2               temp, sigmaY, ftype(iFlt,iFtype), sigmaName, period1, 
-     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
-     4               disthypo, depthvs10, depthvs15, D25, tau,
-     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi, 
-     6               cfcoefrrup, cfcoefrjb, Ry0 )
-                  elseif (sourceType(iFlt) .eq. 7) then
-                    call meanInten ( distRup, distJB, distSeismo,
+c                 Set values for use with directivity                
+c                  lgInten0 = lgInten
+c                  sigma0 = sigmaTotal
+                
+c                 Set default for no randomization of hypocenters                
+                  nHypoX = 1
+                  pHypoX = 1.
+                  nHypoXStep = 1
+                  nHypoZ = 1
+                  pHypoZ = 1.
+                  nHypoZStep = 1
+
+C                 Application of Directivity model. 
+                  if ( fltDirect(iFlt) .eq. 1 .and. dirflag(iProb) .ge. 1
+     1               .and. mag .gt. 5.6 .and. specT(iProb) .ge. 0.50 ) then
+                   dirFlag1 = 1
+                   if ( dirflag(iProb) .lt. 100 ) then     
+                    nHypoX = 9
+                    nHypoZ = 9
+                    pHypoX = 1./ 9.
+                    pHypoZ = 1./ 9.
+                   endif
+                  else
+                   dirFlag1 = 0
+                  endif
+                    
+c                 Loop over hypocenter location along strike (aleatory)
+                  do 540 iHypoX=1,nHypoX,nHypoXstep
+                   fs = float(iHypoX) / (nHypoX + 1.)
+
+c                  Loop over hypocenter location down dip (aleatory)
+                   do 530 iHypoZ=1,nHypoZ,nHypoZstep
+                    fd = float(iHypoZ) / (nHypoZ + 1.)
+
+C                 Call to the rupture directivity Subroutine if applicable
+c                  if ( dirflag1 .eq. 1) then
+c                    call Directivity ( dirFlag(iProb), specT(iProb), DistRup, zTOR, 
+c     1                 x0, y0, z0, Rx, Ry, Ry0, mag, ftype(iFlt,iFtype), RupWidth, 
+c     2                 RupLen, dipavgd, HWflag, dirMed, dirSigma, fltgrid_x, 
+c     3                 fltgrid_y, fltgrid_z, n1, n2, fs, fd, dpp_flag, 
+c     4                 iLocX, iLocY)
+c     
+c                       write (44,'( 6f8.2 )') mag, RupLen, fs, fd, dirMed, dirSigma
+c
+c                   Add directivity to median and sigma
+c                    lgInten = lgInten0 + dirMed
+c                    if ( dirSigma .lt. 0. ) then
+c                      t1 = sigma0**2 - dirSigma**2
+c                    else
+c                      t1 = sigma0**2 + dirSigma**2
+c                    endif
+c                    if ( t1 .lt. 0. ) t1 = 0.01
+c                    sigmaTotal = sqrt( t1 )  
+c                  endif 
+
+                    call Set_MeanInten (distRup, distJB, distSeismo,
      1               HWFlag, mag, jcalc1, specT(iProb),  
-     2               lgInten, sigmaY, mechS7(iFlt,iMag), attenName, period1, 
+     2               ftype(iFlt,iFtype), attenName, period1, 
      3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
      4               disthypo, depthvs10, depthvs15, D25, tau,
      5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
-     6               cfcoefrrup, cfcoefrjb, Ry0 )
-                  endif
+     6               cfcoefrrup, cfcoefrjb, Ry0, 
+     7               sourceType(iFlt), mechS7(iFlt,iMag), gmScale(iProb,jType,iAtten),
+     8               synchron(iFlt), rup1_flag, synDistRup(iFlt,isyn), syndistJB(iFlt,isyn), 
+     9               syndistSeismo(iFlt,isyn),
+     1               synhwflag(iFlt,isyn), synmag(iFlt,isyn), synjcalc(iFlt),  
+     1               synftype(iFlt,isyn),  
+     2               synhypo(iflt,1), syn_dip(iFlt,isyn),
+     3               syn_zTOR(iFlt,isyn), syn_RupWidth(iFlt,isyn), 
+     4               syn_Rx(iFlt,isyn), 
+     5               syn_Ry0(iFlt,isyn), sigvaradd(iProb,jType,iAtten), sigflag, 
+     6               sigfix1, sigmaName, scalc1, 
+     7               dirFlag1, lgInten, sigmaTotal )                      
 
-c               Check if a constant, user input sigma, is selected
-                elseif (sigflag .eq. 2) then
-                  sigmaY = sigfix1
-                endif
-
-C               Adjust sigma value if sigvaradd .ne. 0.0
-                if (sigvaradd(iProb,jType,iAtten) .ne. 0.0) then
-                  sigmaY = sqrt(sigmaY*sigmaY + sigvaradd(iProb,jType,iAtten) )
-                endif
-
-c               Check that sigma is not less than zero (0.0001)
-                if (sigmaY .lt. 0.0001 ) sigmaY = 0.0001
-
-c               Reset SigmaTotal variable
-                sigmaTotal = sigmaY
-
-c               Set values for use with directivity                
-                lgInten0 = lgInten
-                sigma0 = sigmaTotal
-                
-c               Set default for no randomization of hypocenters                
-                nHypoX = 1
-                pHypoX = 1.
-                nHypoXStep = 1
-                nHypoZ = 1
-                pHypoZ = 1.
-                nHypoZStep = 1
-
-C               Application of Directivity model. 
-                if ( fltDirect(iFlt) .eq. 1 .and. dirflag(iProb) .ge. 1
-     1              .and. mag .gt. 5.6 .and. specT(iProb) .ge. 0.50 ) then
-                 dirFlag1 = 1
-                 if ( dirflag(iProb) .lt. 100 ) then     
-                   nHypoX = 9
-                   nHypoZ = 9
-                   pHypoX = 1./ 9.
-                   pHypoZ = 1./ 9.
-                 endif
-                else
-                 dirFlag1 = 0
-                endif
+                    if (runFlag .eq. 4) then      
+                     nEpsilonSa1 = 41
+                     nEpsilonPGA = 41
+                     nBetaD = 21
+                     nT = 21
+                    else
+                     nEpsilonSa1 = 1
+                     nEpsilonPGA = 1
+                     nT = 1
+                     nBetaD = 1
+                     nKy(iProb) = 1
+                     nAlphaD(iProb) = 1
+                     nBetaD = 1
+                     nSF(iProb) = 1
+                     KyWt(iProb,1) = 1
+                     AlphaDWt(iProb,1) = 1
+                     SFWt(iProb,1) = 1
+                     pEpsilonSa = 1
+                     pEpsilonPGA = 1
+                     pProb = 1
+                     nDamT = 1
+                     SF(iProb,1) = 1
+                     SigmaD(iProb,1) = 0.0
+                     DamHeight(iProb) = 1.0
+                    endif
                     
-c               Loop over hypocenter location along strike (aleatory)
-                do 540 iHypoX=1,nHypoX,nHypoXstep
-                 fs = float(iHypoX) / (nHypoX + 1.)
 
-c                Loop over hypocenter location down dip (aleatory)
-                 do 530 iHypoZ=1,nHypoZ,nHypoZstep
-                  fd = float(iHypoZ) / (nHypoZ + 1.)
-
-C                 Call to the rupture directivity Subroutine if applicable
-                  if ( dirflag1 .eq. 1) then
-                    call Directivity ( dirFlag(iProb), specT(iProb), DistRup, zTOR, 
-     1                 x0, y0, z0, Rx, Ry, Ry0, mag, ftype(iFlt,iFtype), RupWidth, 
-     2                 RupLen, dipavgd, HWflag, dirMed, dirSigma, fltgrid_x, 
-     3                 fltgrid_y, fltgrid_z, n1, n2, fs, fd, dpp_flag, 
-     4                 iLocX, iLocY)
-     
-c                       write (44,'( 6f8.2 )') mag, RupLen, fs, fd, dirMed, dirSigma
-
-c                   Add directivity to median and sigma
-                    lgInten = lgInten0 + dirMed
-                    if ( dirSigma .lt. 0. ) then
-                      t1 = sigma0**2 - dirSigma**2
-                    else
-                      t1 = sigma0**2 + dirSigma**2
-                    endif
-                    if ( t1 .lt. 0. ) t1 = 0.01
-                    sigmaTotal = sqrt( t1 )  
-                  endif 
-  
-c                  Loop over test ground motion values                  
-                   do 510 jInten = 1, nInten(iProb)
-
-c                   Compute Probability of exceeding test  
-                    if ( iMixture(iProb,jType,iAtten)  .eq. 0 ) then
-                      pRock = pxceed3 (lgInten, lgTestInten, sigmaTotal, iProb,jInten,sigTrunc(iProb))
-
-                    else
-                      sigma1 = sigmaTotal*0.8
-                      sigma2 = sigmaTotal*1.2
-                      pRock = 0.5 * pxceed3 (lgInten, lgTestInten, sigma1, iProb,jInten,sigTrunc(iProb))
-     1                        +0.5 * pxceed3 (lgInten, lgTestInten, sigma2, iProb,jInten,sigTrunc(iProb))    
-                    endif
-
-c                   Compute number of standard deviations (epsilon) to reach test level
-                    if (sigmatotal .le. 0.0001) then
-                      epsilon1 = 0.0
-                    else
-                      epsilon1 = ( lgtestInten(iProb,jInten)-lgInten )/sigmaTotal
-                    endif
-   
-c                   Set bin for epsilon deaggregation
-                    call SetBin_Eps ( nEpsBins, epsBins, epsilon1, iepsBin)
+c                   Epistemic uncertainty of Ky              
+                    do 520 iKy = 1, nKy(iProb)
+c                    Epistemic uncertainty of Alpha and Beta pairs              
+                     do 510 iAlphaD = 1, nAlphaD(iProb)
+                     
+c      write(*,*) 'iProb, iAlphaD, AlphaD, BetaD: ', 
+c     1      iProb, iAlphaD, AlphaD(iProb), 
+c     1      BetaD(iProb,iAlphaD,1), BetaD(iProb,iAlphaD,2), BetaD(iProb,iAlphaD,3), AlphaDWt(iProb,iAlphaD)
+c      pause
+                     
+c                     Epistemic uncertainty of Dam period equation              
+                      do 500 iDamT = 1, nDamT(iProb)
+                       sumEpsilonPGA = 0.
+c                      Aleatory variability of PGA              
+                       do 495 iEpsilonPGA = 1, nEpsilonPGA
                         
-c                   Loop over parameter variations (epistemic)
-                    do 500 iParam=1,nParamVar(iFlt,iFltWidth)
+                        if (runFlag .eq. 4) then      
+                         call Dam_Disp_Init1 ( iProb, iEpsilonPGA, iDamT, 
+     1                    iMixture(iProb,jType,iAtten),
+     1                    sigTrunc, nEpsilonPGA, lgInten, 
+     1                    sigmaTotal, lgIntenPGA, pEpsilonPGA, nT, 
+     1                    DamTLoopProb, DamTLoopEpsilon)
+                        endif
+c                       Aleatory variability of Dam period              
+                        do 494 iT = 1,nT
+                         
+                         if (runFlag .eq. 4) then 
+                          specDamT(iT) = 
+     1                      exp( alog( DamT(iProb,iDamT,1)) 
+     2                                 + DamT(iProb,iDamT,2)*lgIntenPGA 
+     3                                 + DamTLoopEpsilon(iT)*DamT(iProb,iDamT,3))
+                          pProb = DamTLoopProb(iT)
 
-c                    Set the weight for this set of parameters (epistemic)
-                     wt = RateParamWt(iFlt,iParam,iFltWidth) 
-     1                 * magRecurWt(iFlt,iParam,iFltWidth) 
-     2                 * faultWidthWt(iFlt,iFltWidth)
-     2                 * maxMagWt(iFlt,iParam,iFltWidth) 
-     2                 * ftype_wt(iFlt,iFtype) 
+                          call Set_MeanInten (distRup, distJB, distSeismo,
+     1                     HWFlag, mag, jcalc1, specDamT(iT),  
+     2                     ftype(iFlt,iFtype), attenName, period1, 
+     3                     iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4                     disthypo, depthvs10, depthvs15, D25, tau,
+     5                     zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6                     cfcoefrrup, cfcoefrjb, Ry0, 
+     7                     sourceType(iFlt), mechS7(iFlt,iMag), gmScale(iProb,jType,iAtten),
+     8                     synchron(iFlt), rup1_flag, synDistRup(iFlt,isyn), syndistJB(iFlt,isyn), 
+     9                     syndistSeismo(iFlt,isyn),
+     1                     synhwflag(iFlt,isyn), synmag(iFlt,isyn), synjcalc(iFlt),  
+     1                     synftype(iFlt,isyn),  
+     2                     synhypo(iflt,1), syn_dip(iFlt,isyn),
+     3                     syn_zTOR(iFlt,isyn), syn_RupWidth(iFlt,isyn), 
+     4                     syn_Rx(iFlt,isyn), 
+     5                     syn_Ry0(iFlt,isyn), sigvaradd(iProb,jType,iAtten), sigflag, 
+     6                     sigfix1, sigmaName, scalc1, 
+     7                     dirFlag1, lgInten1, sigmaTotal1 )
+      
+                          call Set_MeanInten (distRup, distJB, distSeismo,
+     1                     HWFlag, mag, jcalc1, 2*specDamT(iT),  
+     2                     ftype(iFlt,iFtype), attenName, period1, 
+     3                     iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4                     disthypo, depthvs10, depthvs15, D25, tau,
+     5                     zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6                     cfcoefrrup, cfcoefrjb, Ry0, 
+     7                     sourceType(iFlt), mechS7(iFlt,iMag), gmScale(iProb,jType,iAtten),
+     8                     synchron(iFlt), rup1_flag, synDistRup(iFlt,isyn), syndistJB(iFlt,isyn), 
+     9                     syndistSeismo(iFlt,isyn),
+     1                     synhwflag(iFlt,isyn), synmag(iFlt,isyn), synjcalc(iFlt),  
+     1                     synftype(iFlt,isyn),  
+     2                     synhypo(iflt,1), syn_dip(iFlt,isyn),
+     3                     syn_zTOR(iFlt,isyn), syn_RupWidth(iFlt,isyn), 
+     4                     syn_Rx(iFlt,isyn), 
+     5                     syn_Ry0(iFlt,isyn), sigvaradd(iProb,jType,iAtten), sigflag, 
+     6                     sigfix1, sigmaName, scalc1, 
+     7                     dirFlag1, lgInten2, sigmaTotal2 )     
+                          
+                         endif
+                         sumBetaD = 0.
+c                        Aleatory variability of Beta 
+                         do 493 iBetaD = 1, nBetaD
+                                                
+                          if (runFlag .eq. 4) then   
+                         
+                           call Dam_Disp_Init2(iProb, iKy, iAlphaD, nBetaD, iBetaD, BetaD, BetaD1, 
+     1                      synchron(iFlt), rup1_flag, specT(iProb), specDamT(iT), 
+     1                      synmag(iFlt,isyn), synDistRup(iFlt,isyn), Mag, distRup,  
+     1                      lgIntenPGA, lgInten1, sigmaTotal1, lgInten2, sigmaTotal2, phi1, phi2, 
+     1                      Ky(iProb,iKy), AlphaD(iProb,iAlphaD), sigTrunc(iProb), nEpsilonSa1, 
+     1                      Epsilon0, Epsilon_step, pBetaD)
 
-c                    Set up weight array for later output.
-                     wtout(iFlt,iParam,iFltWidth,iFtype) = wt
-         
-c                    Set probability of this earthquake (w/o gm) - (aleatory)
-                     p1 = pMag(iParam,iFltWidth)*pArea*pWidth*pLocX*pLocY(iLocY)
-     1                    *phypoX*phypoZ*probSyn*synwt(iFlt,isyn)
-                    
-c                    Set weights and probabilities for SourceType 7
-                     if (sourceType(iFlt) .eq. 7) then
-                        p1 = 1.0
-                        wt = 1.0
-                     endif
-                    
-c                    Sum up probability (w/o ground motion) as a check
-                     if ( iAtten .eq. 1 .and. iProb .eq. 1 .and. jInten .eq. 1) then
-                       if (sourcetype(iFlt) .ne. 7) then
-                         p1_sum = p1_sum + wt*p1       
-                       elseif (sourcetype(iFlt) .eq. 7) then
-                         p1_sum = p1_sum + wt*p1/ncounts7(iFlt)       
-                       endif                       
-                     endif
+                            sumBetaD = sumBetaD + pBetaD
+ 
+                           sumEpsilonSa = 0.   
+                                                    
+                          endif
+c                         Aleatory variability of Sa at Dam Period              
+                          do 490 iEpsilonSa1 = 1, nEpsilonSa1 
+                                              
+                           if (runFlag .eq. 4) then        
+                            call Dam_Disp_Calc (iEpsilonSa1, Epsilon0, Epsilon_step, lgInten1, sigmaTotal1, 
+     1                                         lgInten2, sigmatotal2, phi2, 
+     1                                         iMixture(iProb,jType,iAtten), sigTrunc(iProb),
+     1                                         synchron(iFlt), rup1_flag, Mag, synmag(iFlt,isyn),
+     1                                         specDamT(iT), Ky(iProb,iKy), AlphaD(iProb,iAlphaD), BetaD1,
+     1                                         lgInten, sigmaTotal, pEpsilonSa )   
+     
+c      write(*,*) BetaD1
+c      pause
+     
+                           endif
+c                          Epistemic uncertainty of conversion from simple model to real displacement              
+                           do 480 iSF = 1,nSF(iProb)
+
+                            if (runFlag .eq. 4) then
+                             lgInten = lgInten + alog(SF(iProb,iSF))
+                             lgInten = lgInten - alog(DamHeight(iProb)) + alog(100.)
+                             sigmatotal = sqrt (sigmatotal**2 + SigmaD(iProb,iSF))
+                            endif
+
+                            do 470 jInten = 1, nInten(iProb)
+  
+c                            Compute Probability of exceeding test  
+                             if ( iMixture(iProb,jType,iAtten)  .eq. 0 ) then
+                              pRock = pxceed3 (lgInten, lgTestInten, sigmaTotal, iProb,jInten,sigTrunc(iProb))
+                             else
+                               sigma1 = sigmaTotal*0.8
+                               sigma2 = sigmaTotal*1.2
+                               pRock = 0.5 * pxceed3 (lgInten, lgTestInten, sigma1, iProb,jInten,sigTrunc(iProb))
+     1                                 +0.5 * pxceed3 (lgInten, lgTestInten, sigma2, iProb,jInten,sigTrunc(iProb))    
+                             endif
                            
-c                    Add weight for aleatory rupture segmentation
-                     wt = wt * al_segWt(iFlt)
-                     
-c                    Compute Marginal Rate of Occurance
-                     if (sourcetype(iFlt) .ne. 7) then
-                       mHaz = rate(iParam,iFltWidth) * prock * p1 * probAct(iFlt)                       
-                       wt = wt *segwt1(iFLt)
-                     elseif (sourcetype(iFlt) .eq. 7) then
-                       mHaz = rateS7(iFlt,iMag) * prock * p1 * probAct(iFlt)
-                     endif
+                             if (runFlag .eq. 4) pRock = pxceed3 (lgInten, lgTestInten, sigmaTotal, iProb,jInten,4.)
 
-c                    Add marginal rate of exceed to total
-                     Haz(jInten,iProb,iFlt) = Haz(jInten,iProb,iFlt) + mHaz*wt* gm_wt(iProb,jType,iAtten)
+c                            Compute number of standard deviations (epsilon) to reach test level
+                             if (sigmatotal .le. 0.0001) then
+                              epsilon1 = 0.0
+                             else
+                              epsilon1 = ( lgtestInten(iProb,jInten)-lgInten )/sigmaTotal
+                             endif
+    
+c                            Set bin for epsilon deaggregation
+                             call SetBin_Eps ( nEpsBins, epsBins, epsilon1, iepsBin)
+                        
+c                            Loop over parameter variations (epistemic)
+
+                             do 460 iParam=1,nParamVar(iFlt,iFltWidth)
+
+c                             Set the weight for this set of parameters (epistemic)
+                              wt = RateParamWt(iFlt,iParam,iFltWidth) 
+     1                         * magRecurWt(iFlt,iParam,iFltWidth) 
+     2                         * faultWidthWt(iFlt,iFltWidth)
+     2                         * maxMagWt(iFlt,iParam,iFltWidth) 
+     2                         * ftype_wt(iFlt,iFtype) 
+     
+                              dam_wt = KyWt(iProb,iKy)
+     2                         * AlphaDWt(iProb,iAlphaD)
+     2                         * SFWt(iProb,iSF)
+
+c                             Set up weight array for later output.
+                              wtout(iFlt,iParam,iFltWidth,iFtype) = wt
+          
+c                            Set probability of this earthquake (w/o gm) - (aleatory)
+
+                              p1 = pMag(iParam,iFltWidth)*pArea*pWidth*pLocX*pLocY(iLocY)
+     1                           *phypoX*phypoZ*probSyn*synwt(iFlt,isyn)*pEpsilonSa*pEpsilonPGA*pProb*pBetaD
+
+                    
+c                             Set weights and probabilities for SourceType 7
+                              if (sourceType(iFlt) .eq. 7) then
+                               p1 = 1.0*pEpsilonSa*pEpsilonPGA*pProb*pBetaD
+                               wt = 1.0 
+                              endif
+                    
+c      v                      Sum up probability (w/o ground motion) as a check
+                              if ( iAtten .eq. 1 .and. iProb .eq. 1 .and. jInten .eq. 1) then
+                               if (sourcetype(iFlt) .ne. 7) then
+                                p1_sum = p1_sum + wt*dam_wt*p1      
+                               elseif (sourcetype(iFlt) .eq. 7) then
+                                p1_sum = p1_sum + wt*dam_wt*p1/ncounts7(iFlt)     
+                               endif                       
+                              endif
+
+c      v                      Sum up probability (w/ ground motion aka Period for dams) as a check
+                              if (runflag .eq. 4 ) then
+                               if ( iAtten .eq. 1 .and. iProb .eq. 1 .and. jInten .eq. 1) then
+                                if (sourcetype(iFlt) .ne. 7) then
+                                 p1_sum = p1_sum + wt*dam_wt*p1*gm_wt(iProb,jType,iAtten)       
+                                elseif (sourcetype(iFlt) .eq. 7) then
+                                 p1_sum = p1_sum + wt*dam_wt*p1/ncounts7(iFlt)*gm_wt(iProb,jType,iAtten)       
+                                endif                       
+                               endif
+                              endif
+ 
+c                             Add weight for aleatory rupture segmentation
+                              wt = wt * al_segWt(iFlt)
+                       
+c                             Compute Marginal Rate of Occurance
+                              if (sourcetype(iFlt) .ne. 7) then
+                               mHaz = rate(iParam,iFltWidth) * prock * p1 * probAct(iFlt)                      
+                               wt = wt *segwt1(iFLt)
+                              elseif (sourcetype(iFlt) .eq. 7) then
+                               mHaz = rateS7(iFlt,iMag) * prock * p1 * probAct(iFlt)
+                              endif
+ 
+c                             Add marginal rate of exceed to total
+                              Haz(jInten,iProb,iFlt) = Haz(jInten,iProb,iFlt) + mHaz*wt* gm_wt(iProb,jType,iAtten)*dam_wt
                      
-                     HazBins(iMagBin,iDistBin,iEpsBin,iProb,jInten) = 
-     1                      HazBins(iMagBin,iDistBin,iEpsBin,iProb,jInten) + dble(mHaz*wt)
+                              HazBins(iMagBin,iDistBin,iEpsBin,iProb,jInten) = 
+     1                            HazBins(iMagBin,iDistBin,iEpsBin,iProb,jInten) + dble(mHaz*wt)
 
 c  Note: directivity deaggregation was removed from this version
 c                     HazBinsX(iXcost,iProb,jInten) = HazBinsX(iXcost,iProb,jInten) + dble(mHaz*wt)
      
-c                    Add to mean deagg 
-                     wt1 = wt * gm_wt(iProb,jType,iAtten)
-                     m_bar(iProb,jInten) = m_bar(iProb,jInten) + mHaz*wt1*magTotal
-                     d_bar(iProb,jInten) = d_bar(iProb,jInten) + mHaz*wt1*distRup
-                     e_bar(iProb,jInten) = e_bar(iProb,jInten) + mHaz*wt1*epsilon1
-                     Xcost_bar(iProb,jInten) = Xcost_bar(iProb,jInten) + mHaz*wt1*Xcost
+c                             Add to mean deagg 
+                              wt1 = wt * gm_wt(iProb,jType,iAtten)*dam_wt
+                              m_bar(iProb,jInten) = m_bar(iProb,jInten) + mHaz*wt1*magTotal
+                              d_bar(iProb,jInten) = d_bar(iProb,jInten) + mHaz*wt1*distRup
+                              e_bar(iProb,jInten) = e_bar(iProb,jInten) + mHaz*wt1*epsilon1
+                              Xcost_bar(iProb,jInten) = Xcost_bar(iProb,jInten) + mHaz*wt1*Xcost
+ 
+c                             Add to source deagg 
+                              wt1 = wt * gm_wt(iProb,jType,iAtten)*dam_wt
+                              m_bar_s(iFlt,iProb,jInten) = m_bar_s(iFlt,iProb,jInten) + mHaz*wt1*magTotal
+                              rrup_bar_s(iFlt,iProb,jInten) = rrup_bar_s(iFlt,iProb,jInten) + mHaz*wt1*distRup
+                              rjb_bar_s(iFlt,iProb,jInten) = rjb_bar_s(iFlt,iProb,jInten) + mHaz*wt1*distjb
+                              rx_bar_s(iFlt,iProb,jInten) = rx_bar_s(iFlt,iProb,jInten) + mHaz*wt1*Rx
+                              e_bar_s(iFlt,iProb,jInten) = e_bar_s(iFlt,iProb,jInten) + mHaz*wt1*epsilon1
+     
+c                             Save Marginal Hazard to temp array for fractile output
+                              tempHaz(iParam,jInten,iProb,iAtten,iFtype) = mHaz * dam_wt
+     1                               + tempHaz(iParam,jInten,iProb,iAtten,iFtype)
+     
+                              tempHaz1(iParam,jInten,iProb,iFtype) = mHaz* gm_wt(iProb,jType,iAtten) * dam_wt
+     1                               + tempHaz1(iParam,jInten,iProb,iFtype)
+ 
+                              tempHaz2(jType, jInten,iProb,iAtten) = mHaz*wt * dam_wt
+     1                              + tempHaz2(jType, jInten,iProb,iAtten)  
+     
+                              iDam = (iKy-1)*nAlphaD(iProb)*nSF(iProb)+(iAlphaD-1)*nSF(iProb)+iSF
+                              tempHaz3(iProb, iDam, jInten) = mHaz*wt + tempHaz3(iProb, iDam, jInten)
+c                              write(*,*) iKy, iAlphaD, iSF, jInten, mHaz, wt, tempHaz3(iKy, iAlphaD, iSF, jInten)
+c                              pause
+ 
+  460                        continue
+ 470                        continue
+ 480                       continue
+                           sumEpsilonSa = sumEpsilonSa+pEpsilonSa        
+ 490                      continue
+ 493                     continue
+                         sumProb = sumProb + pProb
+ 494                    continue
+                        sumEpsilonPGA = sumEpsilonPGA+pEpsilonPGA
+ 495                   continue
+ 500                  continue
+ 510                 continue
+ 520                continue
+ 530               continue
+ 540              continue
+ 549             continue
+ 550            continue
 
-c                    Add to source deagg 
-                     wt1 = wt * gm_wt(iProb,jType,iAtten)
-                     m_bar_s(iFlt,iProb,jInten) = m_bar_s(iFlt,iProb,jInten) + mHaz*wt1*magTotal
-                     rrup_bar_s(iFlt,iProb,jInten) = rrup_bar_s(iFlt,iProb,jInten) + mHaz*wt1*distRup
-                     rjb_bar_s(iFlt,iProb,jInten) = rjb_bar_s(iFlt,iProb,jInten) + mHaz*wt1*distjb
-                     rx_bar_s(iFlt,iProb,jInten) = rx_bar_s(iFlt,iProb,jInten) + mHaz*wt1*Rx
-                     e_bar_s(iFlt,iProb,jInten) = e_bar_s(iFlt,iProb,jInten) + mHaz*wt1*epsilon1
-
-c                    Save Marginal Hazard to temp array for fractile output
-                     tempHaz(iParam,jInten,iProb,iAtten,iFtype) = mHaz
-     1                        + tempHaz(iParam,jInten,iProb,iAtten,iFtype)
-
-                     tempHaz1(iParam,jInten,iProb,iFtype) = mHaz* gm_wt(iProb,jType,iAtten)
-     1                        + tempHaz1(iParam,jInten,iProb,iFtype)
-
-                     tempHaz2(jType, jInten,iProb,iAtten) = mHaz*wt
-     1                        + tempHaz2(jType, jInten,iProb,iAtten)  
-
- 500                continue
- 510               continue
- 530              continue
- 540             continue
- 549            continue
- 550           continue
- 560          continue
+ 560           continue
  561          continue
  600         continue
  650        continue
- 651        continue
  700       continue
  750      continue
 
@@ -628,7 +750,7 @@ c           Set the weight for this set of parameters (epistemic)
 
  800     continue
  
- 850     MinRrup(iFlt) = MinRrup_temp
+         MinRrup(iFlt) = MinRrup_temp
 
 c        Write temp Haz array to file
          call WriteTempHaz ( tempHaz, nParamVar, nInten, nProb, 
@@ -670,6 +792,10 @@ c      Write out the deagrregated hazard
      2           rx_bar_s, e_bar_s, specT, nProb)
      
        call WriteTempHaz2 ( tempHaz2, nInten, nProb, nAtten, nattenType )
+       
+       if (runFlag .eq. 4) then
+         call WriteTempHaz3 ( tempHaz3, nProb, nKy, nAlphaD, nSF, nInten )
+       endif
 
  1000 continue
 

@@ -52,7 +52,7 @@ c     Set top_grid for sourceTypes 2/3 and 4 (different)
         endif
       
 c     Compute distances for areal sources      
-        if ( sourceType .eq. 2 .or. sourceType .eq. 3 .or. sourceType .eq. 4 ) then
+        if ( sourceType .eq. 2 .or. sourceType .eq. 3 .or. sourceType .eq. 4 .or. sourceType .eq. 8 ) then
 
 c         Set hypoDepth for areal sources
           hypoDepth = (iLocY-0.5)*ystep + top_grid

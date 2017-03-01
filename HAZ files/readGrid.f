@@ -132,6 +132,7 @@ c     it is at too large a distance (but is still in the activity rate of the in
 
 c  --------------------------------------------------------------------
 
+
       subroutine RdSource7 ( iFlt, mag, rate, dist, dip, mech, ncount )
  
       implicit none

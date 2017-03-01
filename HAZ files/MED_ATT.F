@@ -4902,3 +4902,151 @@ c     Convert to g
 
       return
       end
+
+
+c------------------------------------------------------------------------------------
+
+      subroutine Set_meanInten (distRup, distJB, distSeismo,
+     1               HWFlag, mag, jcalc1, specT1,  
+     2               ftype1, attenName, period1, 
+     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4               disthypo, depthvs10, depthvs15, D25, tau,
+     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6               cfcoefrrup, cfcoefrjb, Ry0, 
+     7               sourceType1, mechS71, gmScale1,
+     8               synchron1, rup1_flag, synDistRup1, syndistJB1, 
+     1                syndistSeismo1,
+     2                synhwflag1, synmag1, synjcalc1,  
+     3                synftype1,  
+     4                synhypo1, syn_dip1,
+     6                syn_zTOR1, syn_RupWidth1, 
+     7                syn_Rx1, 
+     8                syn_Ry01, sigvaradd1, sigflag, 
+     9                sigfix1, sigmaName, scalc1, 
+     9                dirFlag1, lgInten, sigmaTotal )
+
+
+      implicit none
+      include 'pfrisk.h'
+      
+      real distRup, distJB, distSeismo, mag, specT1, period1, vs, hypodepth, AR,
+     1     dipavgd, disthypo, depthvs10, depthvs15, D25, tau, zTor, theta_site, RupWidth, 
+     2     Rx, phi, cfcoefrrup, cfcoefrjb, Ry0, mechS71, gmScale1, synDistRup1, syndistJB1,
+     3     syndistSeismo1, synmag1, synhypo1, syn_dip1, syn_zTOR1, syn_RupWidth1, syn_Rx1,
+     4     syn_Ry01, sigvaradd1, sigfix1, lgInten, sigmaTotal, sigmaY, lgIntenS, temp, lgInten0,
+     5     sigma0
+      
+      integer HWFlag, jcalc1, ftype1, iatten, iProb, jType, intflag, vs30_class, forearc,
+     1        SourceType1, synchron1, rup1_flag, synhwflag1, synjcalc1, synftype1, sigflag, 
+     2        dirFlag1, scalc1
+      
+      character*80 attenName(4,MAX_PROB), sigmaName(4,MAX_PROB)
+      
+      lgInten = 999
+      sigmaY = 999
+      
+c              Compute the median and sigma of the ground motions
+               if (sourceType1 .ne. 7) then
+                 call meanInten ( distRup, distJB, distSeismo,
+     1               HWFlag, mag, jcalc1, specT1,  
+     2               lgInten, sigmaY, ftype1, attenName, period1, 
+     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4               disthypo, depthvs10, depthvs15, D25, tau,
+     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6               cfcoefrrup, cfcoefrjb, Ry0 )
+               elseif (sourceType1 .eq. 7) then
+                 call meanInten ( distRup, distJB, distSeismo,
+     1               HWFlag, mag, jcalc1, specT1,  
+     2               lgInten, sigmaY, mechS71, attenName, period1, 
+     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4               disthypo, depthvs10, depthvs15, D25, tau,
+     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6               cfcoefrrup, cfcoefrjb, Ry0 )
+              endif
+              
+c               Add epistemic uncertainty term (constant shift) to median
+                lgInten = lgInten + gmScale1      
+
+                 if (synchron1 .gt. 0 .and. rup1_flag .eq. 1) then
+                  call meanInten ( synDistRup1, syndistJB1, 
+     1                syndistSeismo1,
+     2                synhwflag1, synmag1, synjcalc1, specT1,  
+     3                lgIntenS, temp, synftype1, attenName, period1, 
+     4                iAtten, iProb, jType, vs, synhypo1, intflag, AR, syn_dip1,
+     5                disthypo, depthvs10, depthvs15, D25, tau,
+     6                syn_zTOR1, theta_site, syn_RupWidth1, 
+     7                vs30_class, forearc, syn_Rx1, phi,
+     8                cfcoefrrup, cfcoefrjb, syn_Ry01 )
+
+c                 Compute SRSS of median                
+                  lgInten = 0.5* alog( exp(lgInten)**2 + exp(lgIntenS)**2 )
+                endif
+                
+C               Second call get GMPE for different sigma model 
+                if (sigflag .eq. 1) then
+                  if (sourceType1 .ne. 7) then
+                    call meanInten ( distRup, distJB, distSeismo,
+     1               hwflag, mag, scalc1, specT1,  
+     2               temp, sigmaY, ftype1, sigmaName, period1, 
+     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4               disthypo, depthvs10, depthvs15, D25, tau,
+     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi, 
+     6               cfcoefrrup, cfcoefrjb, Ry0 )
+                  elseif (sourceType1 .eq. 7) then
+                    call meanInten ( distRup, distJB, distSeismo,
+     1               HWFlag, mag, jcalc1, specT1,  
+     2               temp, sigmaY, mechS71, sigmaName, period1, 
+     3               iAtten, iProb, jType, vs, hypodepth, intflag, AR, dipavgd,
+     4               disthypo, depthvs10, depthvs15, D25, tau,
+     5               zTOR, theta_site, RupWidth, vs30_class, forearc, Rx, phi,
+     6               cfcoefrrup, cfcoefrjb, Ry0 )
+                  endif
+                  
+
+c               Check if a constant, user input sigma, is selected
+                elseif (sigflag .eq. 2) then
+                  sigmaY = sigfix1
+                endif
+                
+C               Adjust sigma value if sigvaradd .ne. 0.0
+                if (sigvaradd1 .ne. 0.0) then
+                  sigmaY = sqrt(sigmaY*sigmaY + sigvaradd1 )
+                endif
+                
+c               Check that sigma is not less than zero (0.0001)
+                if (sigmaY .lt. 0.0001 ) sigmaY = 0.0001
+
+c               Reset SigmaTotal variable
+                sigmaTotal = sigmaY
+
+c               Set values for use with directivity                
+                lgInten0 = lgInten
+                sigma0 = sigmaTotal
+                
+C                 Call to the rupture directivity Subroutine if applicable
+c                 Not currently working.
+                  if ( dirflag1 .eq. 1) then
+                    write (*,*) 'Directivity not currently implemented'
+                    stop
+                  endif
+c                    call Directivity ( dirFlag(iProb), specT(iProb), DistRup, zTOR, 
+c     1                 x0, y0, z0, Rx, Ry, Ry0, mag, ftype(iFlt,iFtype), RupWidth, 
+c     2                 RupLen, dipavgd, HWflag, dirMed, dirSigma, fltgrid_x, 
+c     3                 fltgrid_y, fltgrid_z, n1, n2, fs, fd, dpp_flag, 
+c     4                 iLocX, iLocY)
+c     
+c                       write (44,'( 6f8.2 )') mag, RupLen, fs, fd, dirMed, dirSigma
+c
+c                   Add directivity to median and sigma
+c                    lgInten = lgInten0 + dirMed
+c                    if ( dirSigma .lt. 0. ) then
+c                      t1 = sigma0**2 - dirSigma**2
+c                    else
+c                      t1 = sigma0**2 + dirSigma**2
+c                    endif
+c                    if ( t1 .lt. 0. ) t1 = 0.01
+c                    sigmaTotal = sqrt( t1 )  
+c                  endif 
+
+      return
+      end

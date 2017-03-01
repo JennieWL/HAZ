@@ -7,7 +7,7 @@ c    Declarations for Main file
      4       tempHaz2(4,MAX_INTEN,MAX_PROB,MAX_ATTEN), p1
       real*8 mHaz, pxceed3, d_bar(MAX_PROB,MAX_INTEN),
      1       m_bar(MAX_PROB,MAX_INTEN), e_bar(MAX_PROB,MAX_INTEN),
-     2       Xcost_bar(MAX_PROB,MAX_INTEN)
+     2       Xcost_bar(MAX_PROB,MAX_INTEN), pxceed4
       real*8 m_bar_s(MAX_FLT,MAX_PROB,MAX_INTEN), rrup_bar_s(MAX_FLT, MAX_PROB,MAX_INTEN),
      1       rjb_bar_s(MAX_FLT,MAX_PROB,MAX_INTEN), rx_bar_s(MAX_FLT,MAX_PROB,MAX_INTEN),
      2       e_bar_s(MAX_FLT, MAX_PROB,MAX_INTEN)
@@ -107,6 +107,19 @@ c    Declarations for Main file
      2     magS7(MAX_FLT,MAX_S7), rateS7(MAX_FLT,MAX_S7),
      3     distS7(MAX_FLT,MAX_S7), DipS7(MAX_FLT,MAX_S7),
      4     mechS7(MAX_FLT,MAX_S7), version
-
+      real Ky(MAX_PROB,MAX_KY), AlphaD(MAX_PROB,MAX_AlphaD), SF(MAX_PROB,MAX_SF),
+     2     KyWt(MAX_PROB,MAX_KY), AlphaDWt(MAX_PROB,MAX_AlphaD), SFWt(MAX_PROB,MAX_SF),
+     3     BetaD(MAX_PROB,MAX_ALPHAD,3), 
+     4     DamHeight(MAX_PROB), SigmaD(MAX_PROB,MAX_SF), DamT(MAX_PROB,MAX_DAMT,3),
+     5     DamTWt(MAX_PROB,MAX_DAMT), specDamT(MAX_LOOP), phi1, phi2, BetaD1
+      real LgIntenPGA, DamTLoopEpsilon(MAX_LOOP)
+      integer i,j, nEpsilonSa1, iKy, iAlphaD, iSF, iDam, iBetaD, 
+     1        iDamT, iEpsilonPGA, nEpsilonPGA, iEpsilonSa1
+      integer nKy(MAX_PROB), nAlphaD(MAX_PROB), nSF(MAX_PROB), nBetaD,
+     1        nDamT(MAX_PROB), nT, iT
+      real lgInten1, sigmaTotal1, lgInten2, sigmaTotal2, Epsilon0, Epsilon_step
+      real*8 pEpsilonSa, pEpsilonPGA, sumEpsilonPGA, sumEPsilonSa, pProb, sumProb
+      real*8 dam_wt, tempHaz3(MAX_PROB,MAX_KY*MAX_ALPHAD*MAX_SF, MAX_INTEN),DamTLoopProb(MAX_LOOP), pBetaD, sumBetaD
+      
       character*80 fName(MAX_FLT), attenName(4,MAX_PROB), file1, file2,
      1             sigmaName(4,MAX_PROB), filebmode

@@ -137,3 +137,31 @@ c       dim_log_minus and dim_log_plus
                                                                       
       return                                                                    
       end                                                                       
+c ------------------------------------------------------------------
+
+      real*8 function pxceed4 ( eti, ti, siga, sigTrunc ) 
+
+      implicit none                    
+      include 'pfrisk.h'      
+       
+                                         
+      real eti, ti, siga, sigTrunc, w
+      real*8 g, g1
+
+c     truncates and renormalizes on both low and high end
+
+                                                                                
+      w = (ti-eti)/siga                                                   
+      call NDTR3(w,g)     
+                                                                                                                         
+      if (w .gt. sigTrunc) then                                                 
+        pxceed4 = 0.0  
+      else if (w .lt. (sigTrunc*(-1.))) then
+        pxceed4 = 1.0                                                                 
+      else                                                                      
+        call NDTR3(sigTrunc,g1)                                                       
+        pxceed4 = (g-g1)/(1.-(2.*g1))                                                             
+      endif 
+                                                                    
+      return                                                                    
+      end        
